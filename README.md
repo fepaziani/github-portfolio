@@ -1,7 +1,3 @@
 # github-portfolio
-/github-portfolio
-    /projeto1
-        README.md
-    /projeto2
-        README.md
-    README.md
+#Machine Learning Project that extracts certain data from poorly made OCRs
+
