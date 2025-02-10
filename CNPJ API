@@ -99,7 +99,7 @@ if __name__ == "__main__":
 import requests
 
 # Define your file path
-file_path = "C:\\Users\\FPaziani\\OneDrive - Alvarez and Marsal\\CNPJ_API.xlsx"
+file_path = "path"
 
 # Make a POST request to the FastAPI server
 response = requests.post(
