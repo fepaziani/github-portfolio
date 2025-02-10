@@ -93,7 +93,7 @@ def extract_entities(text):
     return extracted_text.strip()
 
 # Path to the Excel file
-excel_file = r"C:\Users\FPaziani\OneDrive - Alvarez and Marsal\testeM.xlsx"
+excel_file = "file"
 
 # Loads the Excel file
 df = pd.read_excel(excel_file)
