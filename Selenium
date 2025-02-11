@@ -1,0 +1,87 @@
+import requests, re, os, json
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.support import expected_conditions as EC
+
+
+import os
+import time
+import json
+
+def get_list_of_documents(idprocesso,cookies):
+
+    headers = {    }
+
+    params = {    }
+
+    response = requests.get(
+        'url',
+        params=params,
+        cookies=cookies,
+        headers=headers,
+    )
+    
+    # print(response.text)
+    start = re.search('"rows":',response.text).end()
+    final = re.search('],"msgs"',response.text).start() + 1
+
+    data = response.text[start:final]
+    # print(data)
+    json_data = json.loads(data)
+
+    documents_ids = []
+    for document in json_data:
+        documents_ids.append(str(document["ID_PROCESSO_DOCUMENTO"]))
+
+    return documents_ids
+
+def download_files(idprocesso,documentList,cookies):
+    documentsListString = "'"
+    for document in documentList:
+        documentsListString += document+","
+    documentsListString = documentsListString[:-1]+"'"
+
+    headers = {   }
+
+    params = {    }
+
+    response = requests.get(
+        'https://unimednacional.projuris.com.br/projuris/DocumentoProcessoAction.do',
+        params=params,
+        cookies=cookies,
+        headers=headers,
+    )
+
+    if response.status_code == 500:
+        headers = {  }
+
+        params = {        }
+
+        response = requests.get(
+            'https://unimednacional.projuris.com.br/projuris/DocumentoProcessoAction.do',
+            params=params,
+            cookies=cookies,
+            headers=headers,
+        )
+
+        open(r'path\{0}.zip'.format(str(idprocesso)), 'wb').write(response.content)
+
+    else:
+
+        open(r'path\{0}.zip'.format(str(idprocesso)), 'wb').write(response.content)
+
+def pipeline(idprocesso):
+    cookies = {   
+}
+    print("Iniciando Processo:" + str(idprocesso))
+    lista_de_documentos = get_list_of_documents(idprocesso,cookies)
+    # print(lista_de_documentos)
+    if len(lista_de_documentos) == 0:
+        print("PROCESSO NÃO EXISTE: "+ str(idprocesso))
+    else:
+        download_files(idprocesso,lista_de_documentos,cookies)
