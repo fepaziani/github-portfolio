@@ -1,0 +1,87 @@
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+import time
+import os
+
+# Define Chrome options
+options = Options()
+options.add_argument("--start-maximized")
+options.add_experimental_option("excludeSwitches", ["enable-logging"])
+download_directory = r'C:\path\to\save\downloads'
+
+prefs = {"download.default_directory": download_directory}
+options.add_experimental_option("prefs", prefs)
+
+# Initialize the driver
+service = Service(r'C:\path\to\chromedriver.exe')
+driver = webdriver.Chrome(service=service, options=options)
+wait = WebDriverWait(driver, 30)
+
+# Access the site
+driver.get("https://example.com")  # Replace with the correct URL
+
+# Login process
+username_field = wait.until(EC.presence_of_element_located((By.ID, "username_field_id")))
+password_field = wait.until(EC.presence_of_element_located((By.ID, "password_field_id")))
+login_button = wait.until(EC.element_to_be_clickable((By.ID, "login_button_id")))
+
+username_field.send_keys("your_username")
+password_field.send_keys("your_password")
+login_button.click()
+
+# Search for processes and download files
+process_ids = [123456, 789012, 345678]  # Replace with actual process IDs
+for process_id in process_ids:
+    # Input process ID and search
+    search_input = wait.until(EC.visibility_of_element_located((By.ID, "ext-comp-1047")))
+    search_input.clear()
+    search_input.send_keys(str(process_id))
+
+    search_button = wait.until(EC.visibility_of_element_located((By.ID, "ext-gen140")))
+    search_button.click()
+
+    # Select the first result
+    try:
+        result_link = wait.until(EC.element_to_be_clickable((By.XPATH, "//table/tbody/tr[1]/td[1]")))
+        result_link.click()
+    except Exception as e:
+        print(f"No results for process {process_id}: {e}")
+        continue
+
+    # Click "Process Files"
+    process_files_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[@class='files_button']")))
+    process_files_button.click()
+
+    # Download file
+    try:
+        download_link = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Download ZIP")))
+        download_link.click()
+    except Exception as e:
+        print(f"Download failed for process {process_id}: {e}")
+        continue
+
+    # Wait for the file download to complete
+    download_file_path = os.path.join(download_directory, "download.zip")
+    new_file_path = os.path.join(download_directory, f"{process_id}.zip")
+
+    def wait_for_download(file_path, timeout=60):
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if os.path.exists(file_path):
+                return True
+            time.sleep(1)
+        raise TimeoutError(f"File {file_path} not downloaded within {timeout} seconds")
+
+    try:
+        wait_for_download(download_file_path)
+        os.rename(download_file_path, new_file_path)
+        print(f"File saved as {new_file_path}")
+    except Exception as e:
+        print(f"Error handling download for process {process_id}: {e}")
+
+# Close the browser
+driver.quit()
