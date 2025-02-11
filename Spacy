@@ -1,0 +1,122 @@
+import spacy
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import silhouette_score
+from scipy.spatial.distance import pdist, squareform
+from scipy.cluster.hierarchy import linkage, fcluster, dendrogram
+from scipy.sparse import lil_matrix, save_npz, load_npz
+import csv
+import time
+
+start = time.time()
+
+# Function to read all text files in a folder
+def read_files_in_folder(folder_path):
+    texts = []
+    file_names = []
+    for root, _, files in os.walk(folder_path):
+        for file_name in files:
+            if file_name.endswith('.txt'):
+                file_path = os.path.join(root, file_name)
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    texts.append(file.read())
+                    file_names.append(file_path)
+    return texts, file_names
+
+# Load the large Portuguese language model
+nlp = spacy.load("pt_core_news_lg")
+
+# Function to calculate the similarity matrix
+def calculate_similarity_matrix(texts, save_interval=100, save_path='similarity_matrix.npz'):
+    docs = [nlp(text) for text in texts]
+    n = len(docs)
+    similarity_matrix = lil_matrix((n, n))  # Using lil_matrix for sparse storage
+
+    for i in range(n):
+        for j in range(i + 1, n):  # Compute only the upper half of the matrix
+            sim = docs[i].similarity(docs[j])
+            similarity_matrix[i, j] = sim
+            similarity_matrix[j, i] = sim  # Mirror the computed value
+
+        # Periodically save the matrix
+        if i % save_interval == 0:
+            save_npz(save_path, similarity_matrix.tocsr())
+
+    similarity_matrix.setdiag(1.0)  # Diagonal with maximum similarity
+    save_npz(save_path, similarity_matrix.tocsr())
+
+# Function to save the similarity matrix to a CSV file
+def save_similarity_matrix_csv(similarity_matrix, file_names, csv_path='similarity_matrix.csv'):
+    n = similarity_matrix.shape[0]
+    with open(csv_path, mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        header = [''] + file_names
+        writer.writerow(header)
+        for i in range(n):
+            row = [file_names[i]] + similarity_matrix[i].toarray().flatten().tolist()
+            writer.writerow(row)
+
+# Path to the folder containing the TXT files
+folder_path = r"C:\Users\FPaziani\Alvarez and Marsal\Data Analytics - BMTE\Data\Preprocessed\Notas Fiscais\Classification\NF\Nf"
+
+# Read all files in the folder
+texts, file_names = read_files_in_folder(folder_path)
+
+# Calculate the similarity matrix
+calculate_similarity_matrix(texts)
+
+# Load the similarity matrix from disk
+similarity_matrix = load_npz('similarity_matrix.npz')
+
+# Verify if the similarity matrix is in the correct format
+print(f"Shape of the similarity matrix: {similarity_matrix.shape}")
+
+# Save the similarity matrix to a CSV file
+save_similarity_matrix_csv(similarity_matrix, file_names)
+
+# Compute the distance matrix
+distance_matrix = 1 - similarity_matrix.toarray()
+
+# Verify if the distance matrix is in the correct format
+print(f"Shape of the distance matrix: {distance_matrix.shape}")
+
+# Convert the distance matrix to a condensed format required for linkage
+condensed_distance_matrix = pdist(distance_matrix)
+
+# Verify the size of the condensed distance matrix
+print(f"Shape of the condensed distance matrix: {condensed_distance_matrix.shape}")
+
+# Create the linkage matrix
+Z = linkage(condensed_distance_matrix, 'ward')
+
+# Compute silhouette scores for different cluster numbers
+silhouette_scores = []
+K = range(2, 20)
+
+# Expand the condensed distance matrix to square form
+distance_square_matrix = squareform(condensed_distance_matrix)
+
+for k in K:
+    clusters = fcluster(Z, k, criterion='maxclust')
+    score = silhouette_score(distance_square_matrix, clusters, metric='precomputed')
+    silhouette_scores.append(score)
+
+# Choose the number of clusters with the best silhouette score
+best_k = K[np.argmax(silhouette_scores)]
+print(f"Best number of clusters: {best_k}")
+
+# Define clusters with the optimal number
+clusters = fcluster(Z, best_k, criterion='maxclust')
+print("Clusters:", clusters)
+
+end = time.time()
+print(f"Execution time: {end-start} seconds")
+
+plt.figure(figsize=(15, 10))
+dendrogram(Z, labels=file_names, leaf_rotation=90)
+plt.axhline(y=Z[-best_k + 1, 2], color='r', linestyle='--')
+plt.title('Hierarchical Clustering Dendrogram of Texts')
+plt.xlabel('Documents')
+plt.ylabel('Distance')
+plt.show()
