@@ -1,0 +1,133 @@
+import requests
+import re
+import os
+import json
+from concurrent.futures import ThreadPoolExecutor
+import pandas as pd
+from functools import partial
+import time
+
+# Function to fetch the list of documents for a given process ID
+def get_list_of_documents(process_id, cookies):
+    headers = {
+        'accept': '*/*',
+        'accept-language': 'en-US,en;q=0.9',
+        'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'origin': 'https://example.com',  # Replace with the actual origin
+        'referer': f'https://example.com/projuris/MainAction.do?METHOD=inclui&CONTEXT=Processo&KEY=ID_PROCESSO&VALUE={process_id}',  # Replace with the actual referer
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'x-requested-with': 'XMLHttpRequest',
+    }
+
+    params = {
+        'service': 'DocumentoProcessoService',
+        'start': '0',
+        'limit': '200',
+        'METHOD': 'obtemLista',
+        'is_sharing': 'false',
+        'labelValue': '',
+        'ID_PROCESSO': str(process_id),
+        'serviceMethod': 'lista',
+        '_dc': '1718657041228',  # Replace with a dynamic value if needed
+        'callback': 'stcCallback1007',
+    }
+
+    response = requests.get(
+        'https://example.com/projuris/DocumentoProcessoAction.do',  # Replace with the actual URL
+        params=params,
+        cookies=cookies,
+        headers=headers,
+    )
+
+    # Extract the JSON data from the response
+    start = re.search('"rows":', response.text).end()
+    final = re.search('],"msgs"', response.text).start() + 1
+    data = response.text[start:final]
+    json_data = json.loads(data)
+
+    # Filter documents of type "Decision"
+    documents_ids = [
+        str(document["ID_PROCESSO_DOCUMENTO"])
+        for document in json_data
+        if "Decision" == str(document["ID_TIPO_DOCUMENTO_TIPO_DOC_PRO"])  # Replace "Decision" with the actual document type
+    ]
+
+    return documents_ids
+
+
+# Function to download files for a given process ID and document list
+def download_files(process_id, document_list, cookies):
+    documents_list_string = "'" + ",".join(document_list) + "'"
+
+    headers = {
+        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'accept-language': 'en-US,en;q=0.9',
+        'referer': f'https://example.com/projuris/MainAction.do?METHOD=inclui&CONTEXT=Processo&KEY=ID_PROCESSO&VALUE={process_id}',  # Replace with the actual referer
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    }
+
+    params = {
+        'ext-comp-1074': '20',
+        'ext-comp-1085': '',
+        'ID_PROCESSO_DOCUMENTO': str(document_list[0]),
+        'FILTRO': '',
+        'ID_PROCESSO': str(process_id),
+        'METHOD': 'multipleDownload',
+        'MULTIPLEID': documents_list_string,
+        'ID_PROCESSO_EVENTO': '',
+    }
+
+    response = requests.get(
+        'https://example.com/projuris/DocumentoProcessoAction.do',  # Replace with the actual URL
+        params=params,
+        cookies=cookies,
+        headers=headers,
+    )
+
+    # Save the downloaded file
+    output_dir = 'path/to/output/directory'  # Replace with the actual output directory
+    os.makedirs(output_dir, exist_ok=True)
+    output_file = os.path.join(output_dir, f'{process_id}.zip')
+
+    if response.status_code == 200:
+        with open(output_file, 'wb') as file:
+            file.write(response.content)
+        print(f"Downloaded file for process ID: {process_id}")
+    else:
+        print(f"Failed to download file for process ID: {process_id}. Status code: {response.status_code}")
+
+
+# Main pipeline function
+def pipeline(process_id):
+    # Replace with actual cookies or a function to fetch them dynamically
+    cookies = {
+        'example_cookie_name': 'example_cookie_value',  # Replace with actual cookie data
+    }
+
+    output_file = os.path.join('path/to/output/directory', f'{process_id}.zip')  # Replace with the actual output directory
+
+    if not os.path.exists(output_file):
+        print(f"Starting process: {process_id}")
+        document_list = get_list_of_documents(process_id, cookies)
+
+        if not document_list:
+            print(f"No documents found for process ID: {process_id}")
+        else:
+            download_files(process_id, document_list, cookies)
+    else:
+        print(f"Process already completed: {process_id}")
+
+
+# Main script execution
+if __name__ == "__main__":
+    # Load process IDs from an Excel file
+    input_file = 'path/to/input/file.xlsx'  # Replace with the actual input file path
+    df = pd.read_excel(input_file)
+    process_ids = df['ID_PROCESSO'].values.tolist()
+
+    # Set the number of threads for parallel execution
+    num_threads = 15
+
+    # Run the pipeline in parallel using ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        executor.map(pipeline, process_ids)
